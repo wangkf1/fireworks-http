@@ -1,27 +1,20 @@
-#include <iostream>
-#include <vector>
 #include <cassert>
-#include <string>
 #include <unistd.h>
 #include <future>
 #include <chrono>
-#include <optional>
 
 #include <curl/curl.h>
-#include <boost/program_options.hpp>
 
-namespace po = boost::program_options;
+#include "bench.hpp"
+
 using namespace std::chrono;
 
-struct Result {
-    bool success;
-    int64_t latencyUsecs;
-};
-
+// do nothing with the returned data
 size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata) {
     return size * nmemb;
 }
 
+// launch function passed to async
 Result launchGetRequest(const std::string& address) {
     // todo: object pool to reuse handles. 
     CURL* curl = curl_easy_init();
@@ -40,64 +33,14 @@ Result launchGetRequest(const std::string& address) {
     return result;
 }
 
-struct Options {
-    std::string address;
-    int qps;
-    int duration;
-};
-
-std::optional<Options> ParseOptions(int argc, char** argv) {
-    Options options;
-
-    try {
-        // options
-        po::options_description desc("HTTP benchmarking tool");
-        desc.add_options()
-            ("help",                                                    "produce help message")
-            ("address",     po::value<std::string>(&options.address),   "HTTP address")
-            ("qps",         po::value<int>(&options.qps),               "queries per second")
-            ("duration",    po::value<int>(&options.duration)->default_value(5),"duration of test in seconds. default=5")
-        ;
-
-        po::variables_map vm;
-        po::store(po::command_line_parser(argc, argv).
-                    options(desc).run(), vm);
-        po::notify(vm);
-
-        if (vm.count("help")) {
-            std::cout << "Usage: options_description [options]\n";
-            std::cout << desc;
-            return std::nullopt;
-        }
-
-        if (!vm.count("address")) {
-            std::cerr << "--address is required!\n";
-            return std::nullopt;
-        }
-        if (!vm.count("qps")) {
-            std::cerr << "--qps is required!\n";
-            return std::nullopt;
-        }
-    } catch(std::exception& e) {
-        std::cerr << "Caught exception while parsing args: " << e.what() << "\n";
-        return std::nullopt;
-    }
-    return options;
-}
-
-// usage: ./bench --address <address> --qps <num> [--duration <secs>] [--numhandles <handles>] [--warmupDuration <secs>]
-int main(int argc, char** argv) {
-    // Parse cmd line args
-    auto maybeOptions = ParseOptions(argc, argv);
-    if (maybeOptions == std::nullopt) {
-        return 1;
-    }
-    auto options = maybeOptions.value();
-
+BenchmarkStats RunHttpBenchmark(Options options) {
+    // setup
     curl_global_init(CURL_GLOBAL_DEFAULT);
     const int64_t usecs = (1e6 / options.qps);
     std::vector<std::future<Result>> futures;
     futures.reserve(options.qps * options.duration);
+
+    // submit requests at a fixed rate
     auto start = high_resolution_clock::now();
     for (int i = 0; i < options.qps*options.duration; ++i) {
         auto lastClock = high_resolution_clock::now();
@@ -114,20 +57,22 @@ int main(int argc, char** argv) {
     // wait on futures and get results
     int successes = 0;
     int64_t latencySum = 0;
+    BenchmarkStats stats;
+    stats.results.reserve(options.qps * options.duration);
     for (int i = 0; i < futures.size(); ++i) {
         auto &f = futures[i];
         Result result = f.get();
         successes += (int)result.success;
         latencySum += result.latencyUsecs;
+        stats.results.push_back(result);
     }
     auto stop = high_resolution_clock::now();
-
-    std::cout << "Submitted " << futures.size() << " requests over " 
-            << duration_cast<milliseconds>(submitStop - start).count() / 1000.0 << " seconds at " << options.qps << " qps\n";
-    std::cout << "Success rate: " << 100 * (double)successes / futures.size() << "%\n";
-    std::cout << "Avg request latency: " << (double)latencySum / futures.size() / 1000.0 << "ms\n";
-    std::cout << "Total submit + receive time: " << duration_cast<milliseconds>(stop - start).count() / 1000.0 << " seconds\n";
-
     curl_global_cleanup();
-    return 0;
+
+    // calculate stats
+    stats.submissionTimeMs = duration_cast<milliseconds>(submitStop - start).count();
+    stats.waitTimeMs = duration_cast<milliseconds>(stop - submitStop).count();
+    stats.successRate = (double)successes / futures.size();
+    stats.avgLatencyMs = (double)latencySum / futures.size() / 1000.0;
+    return stats;
 }
