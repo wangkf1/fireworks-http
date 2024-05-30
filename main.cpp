@@ -11,7 +11,7 @@ std::optional<Options> ParseOptions(int argc, char** argv) {
 
     try {
         // options
-        po::options_description desc("HTTP benchmarking tool");
+        po::options_description desc("HTTP benchmarking tool. Submit HTTP requests at a fixed rate for a duration of time");
         desc.add_options()
             ("help",                                                    "produce help message")
             ("address",     po::value<std::string>(&options.address),   "HTTP address")
@@ -46,7 +46,6 @@ std::optional<Options> ParseOptions(int argc, char** argv) {
     return options;
 }
 
-// usage: ./bench --address <address> --qps <num> [--duration <secs>] [--numhandles <handles>] [--warmupDuration <secs>]
 int main(int argc, char** argv) {
     // Parse cmd line args
     auto maybeOptions = ParseOptions(argc, argv);

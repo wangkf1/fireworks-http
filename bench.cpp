@@ -17,6 +17,7 @@ size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata) {
 // launch function passed to async
 Result launchGetRequest(const std::string& address) {
     // todo: object pool to reuse handles. 
+    // todo: macro to check errors and exit early with failure
     CURL* curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_URL, address.c_str());
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
@@ -40,6 +41,17 @@ BenchmarkStats RunHttpBenchmark(Options options) {
     std::vector<std::future<Result>> futures;
     futures.reserve(options.qps * options.duration);
 
+    // warmup requests (useful for when we have threadpools and object pools to build up)
+    for (int i = 0; i < options.qps*options.warmup; ++i) {
+        // launch request asynchronously
+        futures.push_back(std::async(std::launch::async, launchGetRequest, options.address));
+        usleep(usecs);
+    }
+    for (auto &f : futures) {
+        f.wait();
+    }
+    futures.clear();
+    
     // submit requests at a fixed rate
     auto start = high_resolution_clock::now();
     for (int i = 0; i < options.qps*options.duration; ++i) {
