@@ -7,6 +7,7 @@
 
 #include "bench.hpp"
 
+namespace bench {
 using namespace std::chrono;
 
 // do nothing with the returned data
@@ -88,3 +89,4 @@ BenchmarkStats RunHttpBenchmark(Options options) {
     stats.avgLatencyMs = (double)latencySum / futures.size() / 1000.0;
     return stats;
 }
+} //namespace bench

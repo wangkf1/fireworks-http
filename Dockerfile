@@ -1,6 +1,6 @@
 FROM ubuntu:focal
 
-RUN apt update && apt install -y libcurl4-openssl-dev clang libboost-program-options-dev libasio-dev
+RUN apt update && apt install -y libcurl4-openssl-dev clang libboost-program-options-dev libasio-dev strace htop tmux
 
 WORKDIR /app
 COPY . .

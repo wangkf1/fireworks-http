@@ -2,6 +2,7 @@
 #include <optional>
 #include <iostream>
 #include "bench.hpp"
+using namespace bench;
 
 #include <boost/program_options.hpp>
 namespace po = boost::program_options;

@@ -1,6 +1,8 @@
+#pragma once
 #include <vector>
 #include <string>
 
+namespace bench {
 struct Options {
     std::string address;    // http address for all requests
     int qps;                // queries per second
@@ -23,3 +25,5 @@ struct BenchmarkStats {
 };
 
 BenchmarkStats RunHttpBenchmark(Options options);
+
+} //namespace bench
